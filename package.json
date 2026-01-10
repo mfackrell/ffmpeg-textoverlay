@@ -9,7 +9,8 @@
   "dependencies": {
     "@google-cloud/functions-framework": "^3.4.0",
     "@google-cloud/storage": "^7.11.0",
-    "axios": "^1.6.8"
+    "axios": "^1.6.8",
+    "ffmpeg-static": "^5.2.0"
   },
   "engines": {
     "node": ">=18 <=22"
