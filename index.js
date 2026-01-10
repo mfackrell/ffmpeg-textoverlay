@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
 import { fileURLToPath } from 'url';
+import ffmpegStatic from 'ffmpeg-static';
 
 // 🔴 DEPLOY FINGERPRINT — DO NOT REMOVE YET
 console.log('FFMPEG GITHUB DEPLOY ACTIVE', new Date().toISOString());
@@ -16,7 +17,7 @@ const storage = new Storage();
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'ssm-renders-8822';
 
 // Use the system-installed ffmpeg
-const ffmpegPath = 'ffmpeg';
+const ffmpegPath = ffmpegStatic;
 
 // Helper function to wrap text into multiple lines
 function wrapText(text, maxWidth) {
