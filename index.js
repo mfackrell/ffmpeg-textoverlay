@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
 
 // Library imports for FFmpeg and Fonts
 import ffmpegPath from 'ffmpeg-static';
@@ -16,8 +17,10 @@ const storage = new Storage();
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'ssm-renders-8822';
 
 // Path to the font provided by the @fontsource/roboto library
-const fontPath = path.join(__dirname, 'node_modules/@fontsource/roboto/files/roboto-latin-700-normal.woff');
+const require = createRequire(import.meta.url);
+const fontPath = require.resolve('@fontsource/roboto/files/roboto-latin-700-normal.woff');
 
+//2.
 function wrapText(text, maxWidth) {
   const words = text.split(' ');
   let lines = [];
@@ -68,7 +71,7 @@ async function renderTextOverlay(fileName, videoUrl, overlays) {
     const sanitizedText = wrappedText.replace(/:/g, "\\:").replace(/'/g, "\\'");
 
     const drawText =
-      `drawtext=fontfile='${fontPath}':` +
+      `drawtext=fontfile='${fontPath.replace(/:/g, '\\:')}':` + // Add this replace
       `text='${sanitizedText}':` +
       `fontcolor=white:` +
       `fontsize=36:` +
