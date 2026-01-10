@@ -1,11 +1,10 @@
 {
   "name": "ffmpeg-textoverlay",
   "version": "1.0.0",
-  "description": "Cloud Run service for FFmpeg text overlay rendering",
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "functions-framework --target=ffmpegTextOverlay --port=8080"
   },
   "dependencies": {
     "@google-cloud/functions-framework": "^3.4.0",
@@ -13,6 +12,7 @@
     "axios": "^1.6.8"
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=18 <=22"
   }
 }
+
