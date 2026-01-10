@@ -5,10 +5,9 @@ import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
 import { fileURLToPath } from 'url';
-import ffmpegStatic from 'ffmpeg-static';
 
-// 🔴 DEPLOY FINGERPRINT — DO NOT REMOVE YET
-console.log('FFMPEG GITHUB DEPLOY ACTIVE', new Date().toISOString());
+// Library imports for FFmpeg and Fonts
+import ffmpegPath from 'ffmpeg-static';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,10 +15,9 @@ const __dirname = path.dirname(__filename);
 const storage = new Storage();
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'ssm-renders-8822';
 
-// Use the system-installed ffmpeg
-const ffmpegPath = ffmpegStatic;
+// Path to the font provided by the @fontsource/roboto library
+const fontPath = path.join(__dirname, 'node_modules/@fontsource/roboto/files/roboto-latin-700-normal.woff');
 
-// Helper function to wrap text into multiple lines
 function wrapText(text, maxWidth) {
   const words = text.split(' ');
   let lines = [];
@@ -62,22 +60,15 @@ async function renderTextOverlay(fileName, videoUrl, overlays) {
 
   let filterChain = '[0:v]';
   let lastLabel = '[0:v]';
-
-  // Explicit path to the font file
-  const fontPath = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'; 
   
   overlays.forEach((overlay, index) => {
     const nextLabel = `[v${index}]`;
-
     const cleanText = overlay.text.replace(/[\[\]]/g, "");
     const wrappedText = wrapText(cleanText, 25);
-
-    const sanitizedText = wrappedText
-      .replace(/:/g, "\\:")
-      .replace(/'/g, "\\'");
+    const sanitizedText = wrappedText.replace(/:/g, "\\:").replace(/'/g, "\\'");
 
     const drawText =
-      `drawtext=fontfile=${fontPath}:` +
+      `drawtext=fontfile='${fontPath}':` +
       `text='${sanitizedText}':` +
       `fontcolor=white:` +
       `fontsize=36:` +
@@ -111,7 +102,7 @@ async function renderTextOverlay(fileName, videoUrl, overlays) {
     outputFile
   ];
 
-  console.log('Running FFmpeg with filters:', filterChain);
+  console.log('Running FFmpeg from library:', ffmpegPath);
   execFileSync(ffmpegPath, args);
 
   console.log(`Uploading ${fileName} to ${BUCKET_NAME}...`);
