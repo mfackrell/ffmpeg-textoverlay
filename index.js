@@ -7,7 +7,8 @@ import axios from 'axios';
 import { fileURLToPath } from 'url';
 
 // 1. Get the library-provided path for FFmpeg
-import ffmpegPath from 'ffmpeg-static';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import ffmpegStatic from 'ffmpeg-static';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,6 +18,7 @@ const fontPath = path.join(__dirname, 'node_modules/@fontsource/roboto/files/rob
 
 const storage = new Storage();
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'ssm-renders-8822';
+const ffmpegPath = process.env.FFMPEG_PATH || ffmpegInstaller.path || ffmpegStatic;
 
 function wrapText(text, maxWidth) {
   const words = text.split(' ');
@@ -32,7 +34,7 @@ function wrapText(text, maxWidth) {
     }
   }
   lines.push(currentLine);
-  return lines.join('\r');
+  return lines.join('\n');
 }
 
 async function download(url, dest) {
@@ -58,30 +60,32 @@ async function renderTextOverlay(fileName, videoUrl, overlays) {
   console.log('Downloading input video...', videoUrl);
   await download(videoUrl, videoFile);
 
-  let filterChain = '[0:v]';
+  const filterParts = [];
   let lastLabel = '[0:v]';
-  
+
   overlays.forEach((overlay, index) => {
-    const nextLabel = `[v${index}]`;
+    const inputLabel = index === 0 ? '[0:v]' : `[v${index - 1}]`;
+    const outputLabel = `[v${index}]`;
     const cleanText = overlay.text.replace(/[\[\]]/g, "");
     const wrappedText = wrapText(cleanText, 25);
-    const sanitizedText = wrappedText.replace(/:/g, "\\:").replace(/'/g, "\\'");
+    const textFile = path.join(tmp, `overlay_${index}.txt`);
+    fs.writeFileSync(textFile, wrappedText, 'utf8');
 
     // Escape the fontPath for FFmpeg's filter engine
     const escapedFontPath = fontPath.replace(/\\/g, '/').replace(/:/g, '\\:');
+    const escapedTextFile = textFile.replace(/\\/g, '/').replace(/:/g, '\\:');
 
     const drawText =
-      `drawtext=fontfile='${escapedFontPath}':` +
-      `text='${sanitizedText}':` +
-      `fontcolor=white:fontsize=36:line_spacing=20:wrap=1:box=1:boxw=w*0.8:boxcolor=black@0.5:boxborderw=20:text_align=center:x=(w-boxw)/2:y=(h-text_h)/2:enable='between(t,${overlay.start},${overlay.end})'`;
+      `${inputLabel}drawtext=fontfile='${escapedFontPath}':` +
+      `textfile='${escapedTextFile}':` +
+      `fontcolor=white:fontsize=36:line_spacing=20:box=1:boxw=w*0.8:boxcolor=black@0.5:boxborderw=20:text_align=center:x=(w-boxw)/2:y=(h-text_h)/2:enable='between(t,${overlay.start},${overlay.end})'` +
+      `${outputLabel}`;
 
-    if (index === 0) {
-      filterChain += `${drawText}${nextLabel}`;
-    } else {
-      filterChain += `;${lastLabel}${drawText}${nextLabel}`;
-    }
-    lastLabel = nextLabel;
+    filterParts.push(drawText);
+    lastLabel = outputLabel;
   });
+
+  const filterChain = filterParts.join(';');
 
   const args = [
     '-i', videoFile,
