@@ -13,22 +13,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // 2. Correct way to find the font path in ES Modules
-const fontPath = path.join(
-  __dirname,
-  'node_modules/@fontsource/roboto/files/roboto-latin-700-normal.woff'
-);
+const fontPath = path.join(__dirname, 'node_modules/@fontsource/roboto/files/roboto-latin-700-normal.woff');
 
 const storage = new Storage();
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'ssm-renders-8822';
 
 function wrapText(text, maxWidth) {
   const words = text.split(' ');
-  const lines = [];
+  let lines = [];
   let currentLine = words[0];
 
   for (let i = 1; i < words.length; i++) {
     if (currentLine.length + 1 + words[i].length <= maxWidth) {
-      currentLine += ` ${words[i]}`;
+      currentLine += ' ' + words[i];
     } else {
       lines.push(currentLine);
       currentLine = words[i];
@@ -70,7 +67,7 @@ async function renderTextOverlay(fileName, videoUrl, overlays) {
     const wrappedText = wrapText(cleanText, 25);
     const sanitizedText = wrappedText.replace(/:/g, "\\:").replace(/'/g, "\\'");
 
-    // 3. Escape the fontPath specifically for FFmpeg's filter engine
+    // Escape the fontPath for FFmpeg's filter engine
     const escapedFontPath = fontPath.replace(/\\/g, '/').replace(/:/g, '\\:');
 
     const drawText =
@@ -97,12 +94,12 @@ async function renderTextOverlay(fileName, videoUrl, overlays) {
     outputFile
   ];
 
-  // 4. Use the absolute library path here
   console.log('Executing FFmpeg...');
   execFileSync(ffmpegPath, args);
 
   console.log(`Uploading ${fileName}...`);
   await storage.bucket(BUCKET_NAME).upload(outputFile, { destination: fileName });
+
   return `https://storage.googleapis.com/${BUCKET_NAME}/${fileName}`;
 }
 
