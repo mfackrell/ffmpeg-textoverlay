@@ -7,7 +7,8 @@ import axios from 'axios';
 import { fileURLToPath } from 'url';
 
 // 1. Get the library-provided path for FFmpeg
-import ffmpegPath from 'ffmpeg-static';
+import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+import ffmpegStatic from 'ffmpeg-static';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,6 +18,7 @@ const fontPath = path.join(__dirname, 'node_modules/@fontsource/roboto/files/rob
 
 const storage = new Storage();
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'ssm-renders-8822';
+const ffmpegPath = process.env.FFMPEG_PATH || ffmpegInstaller.path || ffmpegStatic;
 
 function wrapText(text, maxWidth) {
   const words = text.split(' ');
