@@ -52,13 +52,17 @@ async function download(url, dest) {
   });
 }
 
-async function renderTextOverlay(fileName, videoUrl, overlays) {
+async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
   const tmp = '/tmp';
   const videoFile = path.join(tmp, 'input_video.mp4');
+  const audioFile = path.join(tmp, 'input_audio.mp3');   // 👈 THIS LINE
   const outputFile = path.join(tmp, fileName);
   
   console.log('Downloading input video...', videoUrl);
   await download(videoUrl, videoFile);
+
+  console.log('Downloading audio...', audioUrl);          // 👈 THIS LINE
+  await download(audioUrl, audioFile);
 
   const filterParts = [];
   let lastLabel = '[0:v]';
@@ -89,11 +93,15 @@ async function renderTextOverlay(fileName, videoUrl, overlays) {
 
   const args = [
     '-i', videoFile,
+    '-stream_loop', '-1',
+    '-i', audioFile,
     '-filter_complex', filterChain,
     '-map', lastLabel,
-    '-map', '0:a?',
+    '-map', '1:a:0',
     '-c:v', 'libx264',
-    '-c:a', 'copy',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac',
+    '-shortest',
     '-y',
     outputFile
   ];
@@ -110,14 +118,15 @@ async function renderTextOverlay(fileName, videoUrl, overlays) {
 // 3. THE MISSING WRAPPER: This allows Cloud Run to "see" your function
 functions.http('ffmpegTextOverlay', async (req, res) => {
   const body = req.body;
-  if (!body.videoUrl || !body.overlays || !Array.isArray(body.overlays)) {
-    return res.status(400).json({ error: 'Payload must include videoUrl and overlays array.' });
+  if (!body.videoUrl || !body.audioUrl || !Array.isArray(body.overlays)) {
+    return res.status(400).json({ error: 'videoUrl, audioUrl, overlays required' });
   }
+
 
   const fileName = `overlay_${Date.now()}.mp4`;
 
   try {
-    const url = await renderTextOverlay(fileName, body.videoUrl, body.overlays);
+    const url = await renderTextOverlay(fileName, body.videoUrl, body.audioUrl, body.overlays);
     res.status(200).json({ status: 'completed', url });
   } catch (err) {
     console.error('Render failed:', err);
