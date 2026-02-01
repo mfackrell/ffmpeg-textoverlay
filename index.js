@@ -89,14 +89,16 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
     lastLabel = outputLabel;
   });
 
-  const filterChain = filterParts.join(';');
+  const filterChain =
+    filterParts.join(';') +
+    `;${lastLabel}scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[vout]`;
 
   const args = [
     '-i', videoFile,
     '-stream_loop', '-1',
     '-i', audioFile,
     '-filter_complex', filterChain,
-    '-map', lastLabel,
+    '-map', '[vout]',
     '-map', '1:a:0',
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
