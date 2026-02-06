@@ -70,7 +70,7 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
   filterParts.push('[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v0]');
 
   overlays.forEach((overlay, index) => {
-    const inputLabel = index === 0 ? '[0v]' : `[v${index - 1}]`;
+    const inputLabel = index === 0 ? '[v0]' : `[v${index - 1}]`;
     const outputLabel = `[v${index}]`;
     const cleanText = overlay.text.replace(/[\[\]]/g, "");
     const wrappedText = wrapText(cleanText, 28);
