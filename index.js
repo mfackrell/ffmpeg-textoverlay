@@ -71,7 +71,7 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
     const inputLabel = index === 0 ? '[0:v]' : `[v${index - 1}]`;
     const outputLabel = `[v${index}]`;
     const cleanText = overlay.text.replace(/[\[\]]/g, "");
-    const wrappedText = wrapText(cleanText, 18);
+    const wrappedText = wrapText(cleanText, 27);
     const textFile = path.join(tmp, `overlay_${index}.txt`);
     fs.writeFileSync(textFile, wrappedText, 'utf8');
 
@@ -82,7 +82,10 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
     const drawText =
       `${inputLabel}drawtext=fontfile='${escapedFontPath}':` +
       `textfile='${escapedTextFile}':` +
-      `fontcolor=white:fontsize=46:line_spacing=12:box=1:boxcolor=black@0.45:boxborderw=40:x=(w-820)/2:y=(h*.45-text_h/2):enable='between(t,${overlay.start},${overlay.end})'` +
+      `fontcolor=white:fontsize=46:line_spacing=12:box=1:boxcolor=black@0.45:boxborderw=40:` +
+      `x=(w-text_w)/2:` +
+      `y=(h*0.5-text_h/2):` +
+      `enable='between(t,${overlay.start},${overlay.end})'` +
       `${outputLabel}`;
 
     filterParts.push(drawText);
