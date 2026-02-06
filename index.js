@@ -82,7 +82,7 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
     const drawText =
       `${inputLabel}drawtext=fontfile='${escapedFontPath}':` +
       `textfile='${escapedTextFile}':` +
-      `fontcolor=white:fontsize=46:line_spacing=12:box=1:boxcolor=black@0.45:boxborderw=40:x=(w-820)/2:y=(h-*.45-text_h/2):enable='between(t,${overlay.start},${overlay.end})'` +
+      `fontcolor=white:fontsize=46:line_spacing=12:box=1:boxcolor=black@0.45:boxborderw=40:x=(w-820)/2:y=(h*.45-text_h/2):enable='between(t,${overlay.start},${overlay.end})'` +
       `${outputLabel}`;
 
     filterParts.push(drawText);
