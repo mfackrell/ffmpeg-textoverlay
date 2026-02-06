@@ -65,10 +65,12 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
   await download(audioUrl, audioFile);
 
   const filterParts = [];
-  let lastLabel = '[0:v]';
+  let lastLabel = '[0v]';
+
+  filterParts.push('[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v0]');
 
   overlays.forEach((overlay, index) => {
-    const inputLabel = index === 0 ? '[0:v]' : `[v${index - 1}]`;
+    const inputLabel = index === 0 ? '[0v]' : `[v${index - 1}]`;
     const outputLabel = `[v${index}]`;
     const cleanText = overlay.text.replace(/[\[\]]/g, "");
     const wrappedText = wrapText(cleanText, 28);
@@ -85,25 +87,23 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
       `textfile='${escapedTextFile}':` +
       `fontcolor=white:fontsize=46:line_spacing=12:` +
       `box=1:boxcolor=black@0.45:boxborderw=40:` +
-      `x=(w/2-360)+(360-text_w)/2:` +
-      `y=(h*0.5-text_h/2):` +
-      `enable='between(t,${overlay.start},${overlay.end})'` +
+      `x=(w-text_w)/2:` +
+      `y=(h-text_h)/2:` +
+      `enable='between(t\\,${overlay.start}\\,${overlay.end})'` +
       `${outputLabel}`;
 
     filterParts.push(drawText);
     lastLabel = outputLabel;
   });
 
-  const filterChain =
-    filterParts.join(';') +
-    `;${lastLabel}scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[vout]`;
+  const filterChain = filterParts.join(';');
+
 
   const args = [
     '-i', videoFile,
-    '-stream_loop', '-1',
     '-i', audioFile,
     '-filter_complex', filterChain,
-    '-map', '[vout]',
+    '-map', lastLabel,
     '-map', '1:a:0',
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
