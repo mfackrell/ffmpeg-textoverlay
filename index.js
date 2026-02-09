@@ -96,6 +96,9 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
     lastLabel = outputLabel;
   });
 
+  filterParts.push('[1:a]anull[a0]');
+
+
   const filterChain = filterParts.join(';');
 
 
@@ -104,7 +107,7 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
     '-i', audioFile,
     '-filter_complex', filterChain,
     '-map', lastLabel,
-    '-map', '1:a:0',
+    '-map', '[a0]',
     '-c:v', 'libx264',
     '-pix_fmt', 'yuv420p',
     '-c:a', 'aac',
