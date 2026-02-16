@@ -49,34 +49,33 @@ async function download(url, dest) {
   });
 }
 
+// ... (Imports and fontPath remain the same)
+
 async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
   const tmp = '/tmp';
-  // FIX 1: Generate a unique ID for THIS specific request
-  const uniqueId = `${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  // 1. GENERATE A TRULY UNIQUE ID INSIDE THE FUNCTION
+  const uniqueId = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
   
   const videoFile = path.join(tmp, `v_${uniqueId}.mp4`);
   const audioFile = path.join(tmp, `a_${uniqueId}.mp3`);
   const outputFile = path.join(tmp, `out_${uniqueId}.mp4`);
-  
-  // Track all files created for guaranteed cleanup
-  const filesToCleanup = [videoFile, audioFile, outputFile];
+  const createdFiles = [videoFile, audioFile, outputFile];
 
   try {
     console.log(`[${uniqueId}] Downloading assets...`);
-    await Promise.all([
-      download(videoUrl, videoFile),
-      download(audioUrl, audioFile)
-    ]);
+    await Promise.all([download(videoUrl, videoFile), download(audioUrl, audioFile)]);
 
-    const filterParts = ['[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v0]'];
+    // 2. FIX THE LABEL INDEXING (Input [v0] -> Output [v1])
+    const filterParts = [`[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[vinit]`];
 
     overlays.forEach((overlay, index) => {
-      const inputLabel = index === 0 ? '[v0]' : `[v${index}]`;
+      const inputLabel = index === 0 ? '[vinit]' : `[v${index}]`;
       const outputLabel = `[v${index + 1}]`;
-      const textFile = path.join(tmp, `t_${uniqueId}_${index}.txt`);
       
+      // 3. USE UNIQUE TEXT FILENAMES TO PREVENT COLLISION
+      const textFile = path.join(tmp, `text_${uniqueId}_${index}.txt`);
       fs.writeFileSync(textFile, wrapText(overlay.text.replace(/[\[\]]/g, ""), 28), 'utf8');
-      filesToCleanup.push(textFile);
+      createdFiles.push(textFile);
 
       const escapedFont = fontPath.replace(/\\/g, '/').replace(/:/g, '\\:');
       const escapedText = textFile.replace(/\\/g, '/').replace(/:/g, '\\:');
@@ -95,25 +94,26 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
       '-i', audioFile,
       '-filter_complex', filterParts.join(';'),
       '-map', lastVideoLabel, 
-      '-map', '1:a',          // FIX 2: Direct map from input 1 (audio)
+      '-map', '1:a',          // 4. MAP AUDIO DIRECTLY (Removes anull overhead)
       '-c:v', 'libx264',
-      '-preset', 'superfast', // Faster processing
+      '-preset', 'superfast', 
       '-pix_fmt', 'yuv420p',
       '-c:a', 'aac',
       '-b:a', '192k',
-      '-shortest',            // Ensures video ends when audio ends
+      '-shortest',
       '-y',
       outputFile
     ];
 
+    console.log(`[${uniqueId}] Executing FFmpeg...`);
     execFileSync(ffmpegPath, args);
 
     await storage.bucket(BUCKET_NAME).upload(outputFile, { destination: fileName });
     return `https://storage.googleapis.com/${BUCKET_NAME}/${fileName}`;
 
   } finally {
-    // FIX 3: Guaranteed cleanup of ALL temp files to prevent disk exhaustion
-    filesToCleanup.forEach(f => {
+    // 5. GUARANTEED CLEANUP (Prevents /tmp disk exhaustion)
+    createdFiles.forEach(f => {
       if (fs.existsSync(f)) fs.unlinkSync(f);
     });
   }
