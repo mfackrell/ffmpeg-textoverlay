@@ -5,26 +5,22 @@ import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
 import { fileURLToPath } from 'url';
-
-// 1. Get the library-provided path for FFmpeg
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import ffmpegStatic from 'ffmpeg-static';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// 2. Correct way to find the font path in ES Modules
 const fontPath = path.join(__dirname, 'node_modules/@fontsource/roboto/files/roboto-latin-700-normal.woff');
 
 const storage = new Storage();
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'ssm-renders-8822';
 const ffmpegPath = process.env.FFMPEG_PATH || ffmpegInstaller.path || ffmpegStatic;
 
+// 1. Text wrapping remains the same
 function wrapText(text, maxWidth) {
   const words = text.split(' ');
   let lines = [];
   let currentLine = words[0];
-
   for (let i = 1; i < words.length; i++) {
     if (currentLine.length + 1 + words[i].length <= maxWidth) {
       currentLine += ' ' + words[i];
@@ -37,6 +33,7 @@ function wrapText(text, maxWidth) {
   return lines.join('\n');
 }
 
+// 2. Download helper remains the same
 async function download(url, dest) {
   const writer = fs.createWriteStream(dest);
   const response = await axios({
@@ -54,89 +51,82 @@ async function download(url, dest) {
 
 async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
   const tmp = '/tmp';
-  const videoFile = path.join(tmp, 'input_video.mp4');
-  const audioFile = path.join(tmp, 'input_audio.mp3');   // 👈 THIS LINE
-  const outputFile = path.join(tmp, fileName);
-  
-  console.log('Downloading input video...', videoUrl);
-  await download(videoUrl, videoFile);
+  const requestId = `${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+  const videoFile = path.join(tmp, `v_${requestId}.mp4`);
+  const audioFile = path.join(tmp, `a_${requestId}.mp3`);
+  const outputFile = path.join(tmp, `out_${requestId}_${fileName}`);
+  const createdFiles = [videoFile, audioFile, outputFile];
 
-  console.log('Downloading audio...', audioUrl);          // 👈 THIS LINE
-  await download(audioUrl, audioFile);
+  try {
+    console.log('Downloading assets...');
+    await Promise.all([download(videoUrl, videoFile), download(audioUrl, audioFile)]);
 
-  const filterParts = [];
-  let lastLabel = '[0v]';
+    const filterParts = ['[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v0]'];
 
-  filterParts.push('[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v0]');
+    overlays.forEach((overlay, index) => {
+      const inputLabel = index === 0 ? '[v0]' : `[v${index}]`; // Corrected labeling logic
+      const outputLabel = `[v${index + 1}]`;
+      const cleanText = overlay.text.replace(/[\[\]]/g, "");
+      const wrappedText = wrapText(cleanText, 28);
+      
+      const textFile = path.join(tmp, `text_${requestId}_${index}.txt`);
+      fs.writeFileSync(textFile, wrappedText, 'utf8');
+      createdFiles.push(textFile); // Track for deletion
 
-  overlays.forEach((overlay, index) => {
-    const inputLabel = index === 0 ? '[v0]' : `[v${index - 1}]`;
-    const outputLabel = `[v${index}]`;
-    const cleanText = overlay.text.replace(/[\[\]]/g, "");
-    const wrappedText = wrapText(cleanText, 28);
-    const textFile = path.join(tmp, `overlay_${index}.txt`);
-    fs.writeFileSync(textFile, wrappedText, 'utf8');
+      const escapedFontPath = fontPath.replace(/\\/g, '/').replace(/:/g, '\\:');
+      const escapedTextFile = textFile.replace(/\\/g, '/').replace(/:/g, '\\:');
 
-    // Escape the fontPath for FFmpeg's filter engine
-    const escapedFontPath = fontPath.replace(/\\/g, '/').replace(/:/g, '\\:');
-    const escapedTextFile = textFile.replace(/\\/g, '/').replace(/:/g, '\\:');
+      filterParts.push(
+        `${inputLabel}drawtext=fontfile='${escapedFontPath}':textfile='${escapedTextFile}':` +
+        `fontcolor=white:fontsize=46:line_spacing=12:box=1:boxcolor=black@0.45:boxborderw=40:` +
+        `x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,${overlay.start},${overlay.end})'${outputLabel}`
+      );
+    });
 
-    const drawText =
-      `${inputLabel}` +
-      `drawtext=fontfile='${escapedFontPath}':` +
-      `textfile='${escapedTextFile}':` +
-      `fontcolor=white:fontsize=46:line_spacing=12:` +
-      `box=1:boxcolor=black@0.45:boxborderw=40:` +
-      `x=(w-text_w)/2:` +
-      `y=(h-text_h)/2:` +
-      `enable='between(t\\,${overlay.start}\\,${overlay.end})'` +
-      `${outputLabel}`;
+    const filterChain = filterParts.join(';');
+    const lastVideoLabel = `[v${overlays.length}]`;
 
-    filterParts.push(drawText);
-    lastLabel = outputLabel;
-  });
+    const args = [
+      '-i', videoFile,
+      '-i', audioFile,
+      '-filter_complex', filterChain,
+      '-map', lastVideoLabel, 
+      '-map', '1:a',          // Map audio from the 2nd input specifically
+      '-c:v', 'libx264',
+      '-preset', 'superfast',
+      '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      '-shortest',
+      '-y',
+      outputFile
+    ];
 
-  filterParts.push('[1:a]anull[a0]');
+    console.log('Executing FFmpeg...');
+    execFileSync(ffmpegPath, args);
 
+    console.log(`Uploading ${fileName}...`);
+    await storage.bucket(BUCKET_NAME).upload(outputFile, { destination: fileName });
+    return `https://storage.googleapis.com/${BUCKET_NAME}/${fileName}`;
 
-  const filterChain = filterParts.join(';');
-
-
-  const args = [
-    '-i', videoFile,
-    '-i', audioFile,
-    '-filter_complex', filterChain,
-    '-map', lastLabel,
-    '-map', '[a0]',
-    '-c:v', 'libx264',
-    '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac',
-    '-shortest',
-    '-y',
-    outputFile
-  ];
-
-  console.log('Executing FFmpeg...');
-  execFileSync(ffmpegPath, args);
-
-  console.log(`Uploading ${fileName}...`);
-  await storage.bucket(BUCKET_NAME).upload(outputFile, { destination: fileName });
-
-  return `https://storage.googleapis.com/${BUCKET_NAME}/${fileName}`;
+  } finally {
+    // Cleanup ALL temporary files
+    createdFiles.forEach(f => {
+      if (fs.existsSync(f)) fs.unlinkSync(f);
+    });
+  }
 }
 
-// 3. THE MISSING WRAPPER: This allows Cloud Run to "see" your function
 functions.http('ffmpegTextOverlay', async (req, res) => {
-  const body = req.body;
-  if (!body.videoUrl || !body.audioUrl || !Array.isArray(body.overlays)) {
+  const { videoUrl, audioUrl, overlays } = req.body;
+  if (!videoUrl || !audioUrl || !Array.isArray(overlays)) {
     return res.status(400).json({ error: 'videoUrl, audioUrl, overlays required' });
   }
-
 
   const fileName = `overlay_${Date.now()}.mp4`;
 
   try {
-    const url = await renderTextOverlay(fileName, body.videoUrl, body.audioUrl, body.overlays);
+    const url = await renderTextOverlay(fileName, videoUrl, audioUrl, overlays);
     res.status(200).json({ status: 'completed', url });
   } catch (err) {
     console.error('Render failed:', err);
