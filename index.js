@@ -66,7 +66,7 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
     await Promise.all([download(videoUrl, videoFile), download(audioUrl, audioFile)]);
 
     // 2. FIX THE LABEL INDEXING (Input [v0] -> Output [v1])
-    const filterParts = [`[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[vinit]`];
+    const filterParts = [`[0:v]loop=loop=-1:size=2:start=0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[vinit]`];
 
     overlays.forEach((overlay, index) => {
       const inputLabel = index === 0 ? '[vinit]' : `[v${index}]`;
@@ -100,6 +100,7 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
       '-pix_fmt', 'yuv420p',
       '-c:a', 'aac',
       '-b:a', '192k',
+      '-movflags', '+faststart', // Adds this line
       '-shortest',
       '-y',
       outputFile
