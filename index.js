@@ -10,13 +10,12 @@ import ffmpegStatic from 'ffmpeg-static';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const fontPath = path.join(__dirname, 'node_modules/@fontsource/roboto/files/roboto-latin-700-normal.woff');
+const fontPath = process.env.FFMPEG_FONT_PATH || '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf';
 
 const storage = new Storage();
 const BUCKET_NAME = process.env.GCS_BUCKET_NAME || 'ssm-renders-8822';
 const ffmpegPath = process.env.FFMPEG_PATH || ffmpegInstaller.path || ffmpegStatic;
 
-// 1. Text wrapping remains the same
 function wrapText(text, maxWidth) {
   const words = text.split(' ');
   let lines = [];
@@ -33,7 +32,6 @@ function wrapText(text, maxWidth) {
   return lines.join('\n');
 }
 
-// 2. Download helper remains the same
 async function download(url, dest) {
   const writer = fs.createWriteStream(dest);
   const response = await axios({
@@ -49,13 +47,10 @@ async function download(url, dest) {
   });
 }
 
-// ... (Imports and fontPath remain the same)
-
 async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
   const tmp = '/tmp';
-  // 1. GENERATE A TRULY UNIQUE ID INSIDE THE FUNCTION
   const uniqueId = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
-  
+
   const videoFile = path.join(tmp, `v_${uniqueId}.mp4`);
   const audioFile = path.join(tmp, `a_${uniqueId}.mp3`);
   const outputFile = path.join(tmp, `out_${uniqueId}.mp4`);
@@ -65,42 +60,42 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
     console.log(`[${uniqueId}] Downloading assets...`);
     await Promise.all([download(videoUrl, videoFile), download(audioUrl, audioFile)]);
 
-    // 2. FIX THE LABEL INDEXING (Input [v0] -> Output [v1])
-    const filterParts = [`[0:v]loop=loop=-1:size=2:start=0,scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[vinit]`];
+    const filterParts = [`[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[vinit]`];
+    let currentLabel = '[vinit]';
 
     overlays.forEach((overlay, index) => {
-      const inputLabel = index === 0 ? '[vinit]' : `[v${index}]`;
       const outputLabel = `[v${index + 1}]`;
-      
-      // 3. USE UNIQUE TEXT FILENAMES TO PREVENT COLLISION
       const textFile = path.join(tmp, `text_${uniqueId}_${index}.txt`);
-      fs.writeFileSync(textFile, wrapText(overlay.text.replace(/[\[\]]/g, ""), 28), 'utf8');
+      const cleanedText = overlay.text.replace(/[\[\]]/g, '').replace(/'/g, "'\\''");
+
+      fs.writeFileSync(textFile, wrapText(cleanedText, 28), 'utf8');
       createdFiles.push(textFile);
 
       const escapedFont = fontPath.replace(/\\/g, '/').replace(/:/g, '\\:');
       const escapedText = textFile.replace(/\\/g, '/').replace(/:/g, '\\:');
 
       filterParts.push(
-        `${inputLabel}drawtext=fontfile='${escapedFont}':textfile='${escapedText}':` +
+        `${currentLabel}drawtext=fontfile='${escapedFont}':textfile='${escapedText}':` +
         `fontcolor=white:fontsize=46:line_spacing=12:box=1:boxcolor=black@0.45:boxborderw=40:` +
         `x=(w-text_w)/2:y=(h-text_h)/2:enable='between(t,${overlay.start},${overlay.end})'${outputLabel}`
       );
+
+      currentLabel = outputLabel;
     });
 
-    const lastVideoLabel = `[v${overlays.length}]`;
-
     const args = [
+      '-stream_loop', '-1',
       '-i', videoFile,
       '-i', audioFile,
       '-filter_complex', filterParts.join(';'),
-      '-map', lastVideoLabel, 
-      '-map', '1:a',          // 4. MAP AUDIO DIRECTLY (Removes anull overhead)
+      '-map', currentLabel,
+      '-map', '1:a',
       '-c:v', 'libx264',
-      '-preset', 'superfast', 
+      '-preset', 'superfast',
       '-pix_fmt', 'yuv420p',
       '-c:a', 'aac',
       '-b:a', '192k',
-      '-movflags', '+faststart', // Adds this line
+      '-movflags', '+faststart',
       '-shortest',
       '-y',
       outputFile
@@ -111,11 +106,11 @@ async function renderTextOverlay(fileName, videoUrl, audioUrl, overlays) {
 
     await storage.bucket(BUCKET_NAME).upload(outputFile, { destination: fileName });
     return `https://storage.googleapis.com/${BUCKET_NAME}/${fileName}`;
-
   } finally {
-    // 5. GUARANTEED CLEANUP (Prevents /tmp disk exhaustion)
-    createdFiles.forEach(f => {
-      if (fs.existsSync(f)) fs.unlinkSync(f);
+    createdFiles.forEach((file) => {
+      if (fs.existsSync(file)) {
+        fs.unlinkSync(file);
+      }
     });
   }
 }
